@@ -2,7 +2,6 @@ session_name: big_board
 environment:
   FRONTEND_PORT: "5173"
   BACKEND_PORT: "8000"
-  FUNNEL_PATH: "/big_board"
 windows:
   - window_name: dev
     layout: even-horizontal
@@ -12,4 +11,4 @@ windows:
       - shell_command:
           - cd frontend && npm run dev -- --port ${FRONTEND_PORT}
       - shell_command:
-          - /Applications/Tailscale.app/Contents/MacOS/Tailscale funnel --https=443 off; /Applications/Tailscale.app/Contents/MacOS/Tailscale funnel --set-path=${FUNNEL_PATH} localhost:${FRONTEND_PORT}
+          - /Applications/Tailscale.app/Contents/MacOS/Tailscale funnel --https=443 off; /Applications/Tailscale.app/Contents/MacOS/Tailscale funnel localhost:${FRONTEND_PORT}
