@@ -1,14 +1,21 @@
 import asyncio
 import json
+import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, date, timedelta
-from typing import Set
+from typing import Set, Any, Optional
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 import database as db
+
+
+# MCP Protocol Constants
+MCP_PROTOCOL_VERSION = "2025-03-26"
+MCP_SERVER_NAME = "big-board"
+MCP_SERVER_VERSION = "1.0.0"
 
 
 class ConnectionManager:
@@ -235,6 +242,267 @@ async def remove_category(name: str):
         await broadcast_items()
         return {"status": "ok"}
     return {"error": "Category not found"}, 404
+
+
+# ============================================================================
+# MCP (Model Context Protocol) HTTP Endpoint
+# ============================================================================
+
+MCP_TOOLS = [
+    {
+        "name": "add_item",
+        "description": """Add a new item to the family dashboard.
+
+Use this to add meetings, reminders, school events, tasks, or activities.
+Items will appear on the dashboard for the specified date.
+
+Recurrence options:
+- null: one-time item
+- "daily": every day
+- "weekdays": Monday through Friday
+- "weekly": same day each week
+- "monthly": same date each month""",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Brief description of the item"},
+                "family_member": {"type": "string", "description": "Who this is for (e.g., 'Dad', 'Emma', 'Everyone')"},
+                "date": {"type": "string", "description": "Date in YYYY-MM-DD format"},
+                "time": {"type": "string", "description": "Optional time in HH:MM format (24-hour)"},
+                "category": {"type": "string", "description": "Category: Meeting, School, Reminder, Task, or Activity"},
+                "recurrence": {"type": "string", "enum": ["daily", "weekdays", "weekly", "monthly"], "description": "Optional recurrence pattern"}
+            },
+            "required": ["title", "family_member", "date", "category"]
+        }
+    },
+    {
+        "name": "list_items",
+        "description": "List items on the family dashboard for a specific date or all items.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "date": {"type": "string", "description": "Optional date in YYYY-MM-DD format"}
+            }
+        }
+    },
+    {
+        "name": "remove_item",
+        "description": "Remove an item from the dashboard by its ID.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "item_id": {"type": "integer", "description": "The ID of the item to remove"}
+            },
+            "required": ["item_id"]
+        }
+    },
+    {
+        "name": "update_item",
+        "description": "Update an existing item on the dashboard.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "item_id": {"type": "integer", "description": "The ID of the item to update"},
+                "title": {"type": "string"},
+                "family_member": {"type": "string"},
+                "date": {"type": "string"},
+                "time": {"type": "string"},
+                "category": {"type": "string"},
+                "recurrence": {"type": "string"}
+            },
+            "required": ["item_id"]
+        }
+    },
+    {
+        "name": "list_family_members",
+        "description": "List all family members and their assigned colors.",
+        "inputSchema": {"type": "object", "properties": {}}
+    },
+    {
+        "name": "list_categories",
+        "description": "List all available categories.",
+        "inputSchema": {"type": "object", "properties": {}}
+    },
+    {
+        "name": "add_category",
+        "description": "Add a new category to the dashboard.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Name of the new category"}
+            },
+            "required": ["name"]
+        }
+    }
+]
+
+
+async def handle_mcp_tool_call(name: str, arguments: dict) -> str:
+    """Execute an MCP tool and return the result as text."""
+    if name == "add_item":
+        item = db.Item(
+            title=arguments["title"],
+            family_member=arguments["family_member"],
+            date=arguments["date"],
+            time=arguments.get("time"),
+            category=arguments["category"],
+            recurrence=arguments.get("recurrence"),
+        )
+        created = await db.add_item(item)
+        await broadcast_items()
+        return f"Added item #{created.id}: '{created.title}' for {created.family_member} on {created.date}"
+
+    elif name == "list_items":
+        date_str = arguments.get("date")
+        if date_str:
+            target = datetime.strptime(date_str, "%Y-%m-%d").date()
+            items = await db.get_items_for_date(target)
+            header = f"Items for {date_str}:"
+        else:
+            items = await db.get_all_items()
+            header = "All items:"
+
+        if not items:
+            return f"{header}\n(none)"
+
+        lines = [header]
+        for item in items:
+            time_str = f" at {item.time}" if item.time else ""
+            recur_str = f" ({item.recurrence})" if item.recurrence else ""
+            handled_str = " [HANDLED]" if item.handled else ""
+            lines.append(
+                f"  #{item.id}: [{item.category}] {item.family_member} - {item.title}"
+                f"{time_str}{recur_str}{handled_str}"
+            )
+        return "\n".join(lines)
+
+    elif name == "remove_item":
+        item_id = arguments["item_id"]
+        success = await db.delete_item(item_id)
+        if success:
+            await broadcast_items()
+            return f"Removed item #{item_id}"
+        return f"Item #{item_id} not found"
+
+    elif name == "update_item":
+        item_id = arguments["item_id"]
+        updates = {k: v for k, v in arguments.items() if k != "item_id" and v is not None}
+        item = await db.update_item(item_id, updates)
+        if item:
+            await broadcast_items()
+            return f"Updated item #{item_id}: {item.title}"
+        return f"Item #{item_id} not found"
+
+    elif name == "list_family_members":
+        members = await db.get_family_members()
+        if not members:
+            return "No family members yet (they are created when items are added)"
+        lines = ["Family members:"]
+        for m in members:
+            lines.append(f"  {m.name}: {m.color}")
+        return "\n".join(lines)
+
+    elif name == "list_categories":
+        categories = await db.get_categories()
+        return "Categories: " + ", ".join(c.name for c in categories)
+
+    elif name == "add_category":
+        category = await db.add_category(arguments["name"])
+        await broadcast_items()
+        return f"Added category: {category.name}"
+
+    return f"Unknown tool: {name}"
+
+
+def jsonrpc_response(id: Any, result: Any) -> dict:
+    """Create a JSON-RPC 2.0 response."""
+    return {"jsonrpc": "2.0", "id": id, "result": result}
+
+
+def jsonrpc_error(id: Any, code: int, message: str) -> dict:
+    """Create a JSON-RPC 2.0 error response."""
+    return {"jsonrpc": "2.0", "id": id, "error": {"code": code, "message": message}}
+
+
+@app.post("/mcp")
+async def mcp_endpoint(request: Request):
+    """MCP Streamable HTTP endpoint."""
+    try:
+        body = await request.json()
+    except Exception:
+        return Response(
+            content=json.dumps(jsonrpc_error(None, -32700, "Parse error")),
+            media_type="application/json",
+            status_code=400
+        )
+
+    method = body.get("method")
+    params = body.get("params", {})
+    req_id = body.get("id")
+
+    # Handle different MCP methods
+    if method == "initialize":
+        result = {
+            "protocolVersion": MCP_PROTOCOL_VERSION,
+            "serverInfo": {
+                "name": MCP_SERVER_NAME,
+                "version": MCP_SERVER_VERSION
+            },
+            "capabilities": {
+                "tools": {}
+            }
+        }
+        response = jsonrpc_response(req_id, result)
+        resp = Response(
+            content=json.dumps(response),
+            media_type="application/json"
+        )
+        resp.headers["Mcp-Session-Id"] = str(uuid.uuid4())
+        return resp
+
+    elif method == "notifications/initialized":
+        # Client acknowledgment - no response needed
+        return Response(status_code=202)
+
+    elif method == "tools/list":
+        result = {"tools": MCP_TOOLS}
+        return Response(
+            content=json.dumps(jsonrpc_response(req_id, result)),
+            media_type="application/json"
+        )
+
+    elif method == "tools/call":
+        tool_name = params.get("name")
+        arguments = params.get("arguments", {})
+
+        try:
+            text_result = await handle_mcp_tool_call(tool_name, arguments)
+            result = {
+                "content": [{"type": "text", "text": text_result}]
+            }
+            return Response(
+                content=json.dumps(jsonrpc_response(req_id, result)),
+                media_type="application/json"
+            )
+        except Exception as e:
+            return Response(
+                content=json.dumps(jsonrpc_error(req_id, -32603, str(e))),
+                media_type="application/json",
+                status_code=500
+            )
+
+    elif method == "ping":
+        return Response(
+            content=json.dumps(jsonrpc_response(req_id, {})),
+            media_type="application/json"
+        )
+
+    else:
+        return Response(
+            content=json.dumps(jsonrpc_error(req_id, -32601, f"Method not found: {method}")),
+            media_type="application/json",
+            status_code=404
+        )
 
 
 if __name__ == "__main__":

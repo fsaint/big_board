@@ -24,10 +24,28 @@ Open http://localhost:5173
 
 ## MCP Configuration
 
-### Claude Code
+### HTTP Transport (Recommended for Remote Access)
 
-Add to `~/.claude/settings.json`:
+The backend includes a built-in MCP HTTP endpoint at `/mcp`. Configure your MCP client:
 
+```json
+{
+  "mcpServers": {
+    "big-board": {
+      "type": "http",
+      "url": "http://studio:8000/mcp"
+    }
+  }
+}
+```
+
+Replace `studio` with your server's hostname or IP.
+
+### Stdio Transport (Local Development)
+
+For local development, you can use the stdio-based MCP server:
+
+**Claude Code** (`~/.claude/settings.json`):
 ```json
 {
   "mcpServers": {
@@ -39,17 +57,7 @@ Add to `~/.claude/settings.json`:
 }
 ```
 
-Or use the CLI:
-```bash
-claude mcp add big-board /path/to/big_board/backend/venv/bin/python /path/to/big_board/backend/mcp_server.py
-```
-
-### Claude Desktop
-
-Add to your config file:
-- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-
+**Claude Desktop** (`~/Library/Application Support/Claude/claude_desktop_config.json`):
 ```json
 {
   "mcpServers": {
@@ -62,8 +70,6 @@ Add to your config file:
 ```
 
 **Note**: Use the full path to the venv Python interpreter to ensure dependencies are available.
-
-For remote backend, use `mcp_remote.py --url http://host:8000` instead.
 
 ## Development
 
