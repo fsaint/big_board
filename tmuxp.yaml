@@ -12,4 +12,4 @@ windows:
       - shell_command:
           - cd frontend && npm run dev -- --port ${FRONTEND_PORT}
       - shell_command:
-          - /Applications/Tailscale.app/Contents/MacOS/Tailscale funnel --set-path=${FUNNEL_PATH} localhost:${FRONTEND_PORT}
+          - /Applications/Tailscale.app/Contents/MacOS/Tailscale funnel --https=443 off; /Applications/Tailscale.app/Contents/MacOS/Tailscale funnel --set-path=${FUNNEL_PATH} localhost:${FRONTEND_PORT}
