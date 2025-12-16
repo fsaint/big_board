@@ -8,6 +8,7 @@ export interface Item {
 	time: string | null;
 	category: string;
 	recurrence: string | null;
+	recurrence_day: number | null;
 	handled: boolean;
 }
 

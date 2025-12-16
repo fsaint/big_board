@@ -40,8 +40,13 @@ Recurrence options:
 - null: one-time item
 - "daily": every day
 - "weekdays": Monday through Friday
-- "weekly": same day each week
-- "monthly": same date each month""",
+- "weekly": same day each week (use recurrence_day to specify which day)
+- "monthly": same date each month (use recurrence_day to specify which day)
+
+For weekly recurrence on a specific day, set recurrence="weekly" and recurrence_day to:
+0=Monday, 1=Tuesday, 2=Wednesday, 3=Thursday, 4=Friday, 5=Saturday, 6=Sunday
+
+Example: "Every Monday" = recurrence="weekly", recurrence_day=0""",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -69,6 +74,10 @@ Recurrence options:
                         "type": "string",
                         "enum": ["daily", "weekdays", "weekly", "monthly"],
                         "description": "Optional recurrence pattern"
+                    },
+                    "recurrence_day": {
+                        "type": "integer",
+                        "description": "For weekly: day of week (0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun). For monthly: day of month (1-31)."
                     }
                 },
                 "required": ["title", "family_member", "date", "category"]
@@ -116,7 +125,8 @@ Recurrence options:
                     "date": {"type": "string"},
                     "time": {"type": "string"},
                     "category": {"type": "string"},
-                    "recurrence": {"type": "string"}
+                    "recurrence": {"type": "string"},
+                    "recurrence_day": {"type": "integer", "description": "For weekly: 0-6 (Mon-Sun). For monthly: 1-31."}
                 },
                 "required": ["item_id"]
             }
@@ -169,6 +179,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 "time": arguments.get("time"),
                 "category": arguments["category"],
                 "recurrence": arguments.get("recurrence"),
+                "recurrence_day": arguments.get("recurrence_day"),
             }
             resp = await client.post("/api/items", json=payload)
             if resp.status_code == 200:

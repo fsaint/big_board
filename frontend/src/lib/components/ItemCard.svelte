@@ -18,6 +18,8 @@
 		markItemHandled(item.id, !item.handled);
 	}
 
+	const weekdayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
 	function formatTime(time: string | null): string {
 		if (!time) return '';
 		const [hours, minutes] = time.split(':');
@@ -27,9 +29,23 @@
 		return `${h12}:${minutes} ${ampm}`;
 	}
 
+	function formatRecurrence(recurrence: string | null, recurrenceDay: number | null): string {
+		if (!recurrence) return '';
+		if (recurrence === 'weekly' && recurrenceDay !== null) {
+			return `(Every ${weekdayNames[recurrenceDay]})`;
+		}
+		if (recurrence === 'monthly' && recurrenceDay !== null) {
+			const suffix = recurrenceDay === 1 || recurrenceDay === 21 || recurrenceDay === 31 ? 'st'
+				: recurrenceDay === 2 || recurrenceDay === 22 ? 'nd'
+				: recurrenceDay === 3 || recurrenceDay === 23 ? 'rd' : 'th';
+			return `(Monthly on ${recurrenceDay}${suffix})`;
+		}
+		return `(${recurrence})`;
+	}
+
 	$: icon = categoryIcons[item.category] || '📌';
 	$: timeDisplay = formatTime(item.time);
-	$: recurrenceLabel = item.recurrence ? `(${item.recurrence})` : '';
+	$: recurrenceLabel = formatRecurrence(item.recurrence, item.recurrence_day);
 </script>
 
 <button
