@@ -1,4 +1,6 @@
 session_name: big_board
+environment:
+  FRONTEND_PORT: "5173"
 windows:
   - window_name: dev
     layout: even-horizontal
@@ -6,6 +8,6 @@ windows:
       - shell_command:
           - cd backend && python main.py
       - shell_command:
-          - cd frontend && npm run dev
+          - cd frontend && npm run dev -- --port ${FRONTEND_PORT}
       - shell_command:
           - /Applications/Tailscale.app/Contents/MacOS/Tailscale funnel 8000
