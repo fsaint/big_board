@@ -1,6 +1,7 @@
 session_name: big_board
 environment:
   FRONTEND_PORT: "5173"
+  BACKEND_PORT: "8000"
 windows:
   - window_name: dev
     layout: even-horizontal
