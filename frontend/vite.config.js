@@ -7,6 +7,7 @@ export default defineConfig({
 	plugins: [sveltekit()],
 	server: {
 		port: 5173,
+		allowedHosts: ['.ts.net'],
 		proxy: {
 			'/ws': {
 				target: `ws://localhost:${backendPort}`,
