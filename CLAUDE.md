@@ -42,17 +42,45 @@ Terminal 2: `cd frontend && npm run dev`
 
 ## MCP Server Configuration
 
-Add to your AI agent's MCP config:
+### Claude Code
+
+Add to your Claude Code MCP settings (`~/.claude/settings.json`):
+
 ```json
 {
   "mcpServers": {
     "big-board": {
-      "command": "python",
+      "command": "/path/to/big_board/backend/venv/bin/python",
       "args": ["/path/to/big_board/backend/mcp_server.py"]
     }
   }
 }
 ```
+
+Or use the CLI:
+```bash
+claude mcp add big-board /path/to/big_board/backend/venv/bin/python /path/to/big_board/backend/mcp_server.py
+```
+
+### Claude Desktop
+
+Add to your Claude Desktop config:
+
+**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+**Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "big-board": {
+      "command": "/path/to/big_board/backend/venv/bin/python",
+      "args": ["/path/to/big_board/backend/mcp_server.py"]
+    }
+  }
+}
+```
+
+**Note**: Use the full path to the Python interpreter in the venv to ensure dependencies are available. Replace `/path/to/big_board` with the actual path (e.g., `/Users/username/git/big_board`).
 
 ## Key Files
 
