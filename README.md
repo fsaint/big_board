@@ -24,20 +24,57 @@ Open http://localhost:5173
 
 ## MCP Configuration
 
-Add to your Claude Desktop or Claude Code config:
+### Claude Code
+
+Add to `~/.claude/settings.json`:
 
 ```json
 {
   "mcpServers": {
     "big-board": {
-      "command": "python",
+      "command": "/path/to/big_board/backend/venv/bin/python",
       "args": ["/path/to/big_board/backend/mcp_server.py"]
     }
   }
 }
 ```
 
+Or use the CLI:
+```bash
+claude mcp add big-board /path/to/big_board/backend/venv/bin/python /path/to/big_board/backend/mcp_server.py
+```
+
+### Claude Desktop
+
+Add to your config file:
+- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
+
+```json
+{
+  "mcpServers": {
+    "big-board": {
+      "command": "/path/to/big_board/backend/venv/bin/python",
+      "args": ["/path/to/big_board/backend/mcp_server.py"]
+    }
+  }
+}
+```
+
+**Note**: Use the full path to the venv Python interpreter to ensure dependencies are available.
+
 For remote backend, use `mcp_remote.py --url http://host:8000` instead.
+
+## Development
+
+### Clear Database
+```bash
+cd backend
+source venv/bin/activate
+python clear_db.py
+```
+
+This removes all items, family members, and categories, then re-initializes with default categories.
 
 ## Features
 

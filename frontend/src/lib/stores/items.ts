@@ -53,9 +53,7 @@ export function connectWebSocket() {
 
 	// Determine WebSocket URL based on current location
 	const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-	const wsUrl = import.meta.env.DEV
-		? 'ws://localhost:8000/ws'
-		: `${protocol}//${window.location.host}/ws`;
+	const wsUrl = `${protocol}//${window.location.host}/ws`;
 
 	ws = new WebSocket(wsUrl);
 

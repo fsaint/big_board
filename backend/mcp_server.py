@@ -8,9 +8,11 @@ items via natural language.
 """
 
 import asyncio
+import os
 from datetime import date, datetime
 from typing import Optional
 
+import httpx
 from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import Tool, TextContent
@@ -18,6 +20,9 @@ from mcp.types import Tool, TextContent
 import database as db
 
 server = Server("big-board")
+
+# Backend API URL - write operations go through here to trigger WebSocket broadcasts
+BACKEND_URL = os.environ.get("BACKEND_URL", "http://localhost:8000")
 
 
 @server.list_tools()
@@ -154,76 +159,90 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
     """Handle tool calls."""
     await db.init_db()
 
-    if name == "add_item":
-        item = db.Item(
-            title=arguments["title"],
-            family_member=arguments["family_member"],
-            date=arguments["date"],
-            time=arguments.get("time"),
-            category=arguments["category"],
-            recurrence=arguments.get("recurrence"),
-        )
-        created = await db.add_item(item)
-        return [TextContent(
-            type="text",
-            text=f"Added item #{created.id}: '{created.title}' for {created.family_member} on {created.date}"
-        )]
+    async with httpx.AsyncClient(base_url=BACKEND_URL, timeout=10.0) as client:
+        if name == "add_item":
+            # Use REST API to trigger WebSocket broadcast
+            payload = {
+                "title": arguments["title"],
+                "family_member": arguments["family_member"],
+                "date": arguments["date"],
+                "time": arguments.get("time"),
+                "category": arguments["category"],
+                "recurrence": arguments.get("recurrence"),
+            }
+            resp = await client.post("/api/items", json=payload)
+            if resp.status_code == 200:
+                data = resp.json()
+                item = data.get("item", {})
+                return [TextContent(
+                    type="text",
+                    text=f"Added item #{item.get('id')}: '{item.get('title')}' for {item.get('family_member')} on {item.get('date')}"
+                )]
+            return [TextContent(type="text", text=f"Failed to add item: {resp.text}")]
 
-    elif name == "list_items":
-        date_str = arguments.get("date")
-        if date_str:
-            target = datetime.strptime(date_str, "%Y-%m-%d").date()
-            items = await db.get_items_for_date(target)
-            header = f"Items for {date_str}:"
-        else:
-            items = await db.get_all_items()
-            header = "All items:"
+        elif name == "list_items":
+            # Read operations can use direct DB access
+            date_str = arguments.get("date")
+            if date_str:
+                target = datetime.strptime(date_str, "%Y-%m-%d").date()
+                items = await db.get_items_for_date(target)
+                header = f"Items for {date_str}:"
+            else:
+                items = await db.get_all_items()
+                header = "All items:"
 
-        if not items:
-            return [TextContent(type="text", text=f"{header}\n(none)")]
+            if not items:
+                return [TextContent(type="text", text=f"{header}\n(none)")]
 
-        lines = [header]
-        for item in items:
-            time_str = f" at {item.time}" if item.time else ""
-            recur_str = f" ({item.recurrence})" if item.recurrence else ""
-            handled_str = " [HANDLED]" if item.handled else ""
-            lines.append(
-                f"  #{item.id}: [{item.category}] {item.family_member} - {item.title}"
-                f"{time_str}{recur_str}{handled_str}"
-            )
-        return [TextContent(type="text", text="\n".join(lines))]
+            lines = [header]
+            for item in items:
+                time_str = f" at {item.time}" if item.time else ""
+                recur_str = f" ({item.recurrence})" if item.recurrence else ""
+                handled_str = " [HANDLED]" if item.handled else ""
+                lines.append(
+                    f"  #{item.id}: [{item.category}] {item.family_member} - {item.title}"
+                    f"{time_str}{recur_str}{handled_str}"
+                )
+            return [TextContent(type="text", text="\n".join(lines))]
 
-    elif name == "remove_item":
-        item_id = arguments["item_id"]
-        success = await db.delete_item(item_id)
-        if success:
-            return [TextContent(type="text", text=f"Removed item #{item_id}")]
-        return [TextContent(type="text", text=f"Item #{item_id} not found")]
+        elif name == "remove_item":
+            # Use REST API to trigger WebSocket broadcast
+            item_id = arguments["item_id"]
+            resp = await client.delete(f"/api/items/{item_id}")
+            if resp.status_code == 200:
+                return [TextContent(type="text", text=f"Removed item #{item_id}")]
+            return [TextContent(type="text", text=f"Item #{item_id} not found")]
 
-    elif name == "update_item":
-        item_id = arguments["item_id"]
-        updates = {k: v for k, v in arguments.items() if k != "item_id" and v is not None}
-        item = await db.update_item(item_id, updates)
-        if item:
-            return [TextContent(type="text", text=f"Updated item #{item_id}: {item.title}")]
-        return [TextContent(type="text", text=f"Item #{item_id} not found")]
+        elif name == "update_item":
+            # Use REST API to trigger WebSocket broadcast
+            item_id = arguments["item_id"]
+            updates = {k: v for k, v in arguments.items() if k != "item_id" and v is not None}
+            resp = await client.put(f"/api/items/{item_id}", json=updates)
+            if resp.status_code == 200:
+                data = resp.json()
+                item = data.get("item", {})
+                return [TextContent(type="text", text=f"Updated item #{item_id}: {item.get('title')}")]
+            return [TextContent(type="text", text=f"Item #{item_id} not found")]
 
-    elif name == "list_family_members":
-        members = await db.get_family_members()
-        if not members:
-            return [TextContent(type="text", text="No family members yet (they are created when items are added)")]
-        lines = ["Family members:"]
-        for m in members:
-            lines.append(f"  {m.name}: {m.color}")
-        return [TextContent(type="text", text="\n".join(lines))]
+        elif name == "list_family_members":
+            members = await db.get_family_members()
+            if not members:
+                return [TextContent(type="text", text="No family members yet (they are created when items are added)")]
+            lines = ["Family members:"]
+            for m in members:
+                lines.append(f"  {m.name}: {m.color}")
+            return [TextContent(type="text", text="\n".join(lines))]
 
-    elif name == "list_categories":
-        categories = await db.get_categories()
-        return [TextContent(type="text", text="Categories: " + ", ".join(c.name for c in categories))]
+        elif name == "list_categories":
+            categories = await db.get_categories()
+            return [TextContent(type="text", text="Categories: " + ", ".join(c.name for c in categories))]
 
-    elif name == "add_category":
-        category = await db.add_category(arguments["name"])
-        return [TextContent(type="text", text=f"Added category: {category.name}")]
+        elif name == "add_category":
+            # Use REST API to trigger WebSocket broadcast
+            resp = await client.post(f"/api/categories?name={arguments['name']}")
+            if resp.status_code == 200:
+                return [TextContent(type="text", text=f"Added category: {arguments['name']}")]
+            return [TextContent(type="text", text=f"Failed to add category: {resp.text}")]
 
     return [TextContent(type="text", text=f"Unknown tool: {name}")]
 
