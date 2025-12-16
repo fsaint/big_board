@@ -10,4 +10,4 @@ windows:
       - shell_command:
           - cd frontend && npm run dev -- --port ${FRONTEND_PORT}
       - shell_command:
-          - /Applications/Tailscale.app/Contents/MacOS/Tailscale funnel 8000
+          - /Applications/Tailscale.app/Contents/MacOS/Tailscale funnel ${FRONTEND_PORT}
