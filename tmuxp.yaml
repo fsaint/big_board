@@ -9,6 +9,6 @@ windows:
       - shell_command:
           - cd backend && source venv/bin/activate && python main.py
       - shell_command:
-          - cd frontend && npm run dev -- --port ${FRONTEND_PORT}
+          - cd frontend && npm run dev -- --port ${FRONTEND_PORT} --host felipe
       - shell_command:
           - /Applications/Tailscale.app/Contents/MacOS/Tailscale serve --https=443 off; /Applications/Tailscale.app/Contents/MacOS/Tailscale serve --https=443 localhost:${FRONTEND_PORT}
