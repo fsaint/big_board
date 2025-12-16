@@ -1,0 +1,11 @@
+session_name: big_board
+windows:
+  - window_name: dev
+    layout: even-horizontal
+    panes:
+      - shell_command:
+          - cd backend && python main.py
+      - shell_command:
+          - cd frontend && npm run dev
+      - shell_command:
+          - /Applications/Tailscale.app/Contents/MacOS/Tailscale funnel 8000
