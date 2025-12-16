@@ -6,7 +6,7 @@ windows:
     layout: even-horizontal
     panes:
       - shell_command:
-          - cd backend && python main.py
+          - cd backend && source venv/bin/activate && python main.py
       - shell_command:
           - cd frontend && npm run dev -- --port ${FRONTEND_PORT}
       - shell_command:
