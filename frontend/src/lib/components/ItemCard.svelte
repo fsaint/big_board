@@ -20,6 +20,17 @@
 
 	const weekdayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
+	// Check if stay_until_done item is overdue (more than 24 hours old)
+	function isOverdue(createdAt: string | null): boolean {
+		if (!createdAt) return false;
+		const created = new Date(createdAt);
+		const now = new Date();
+		const hoursDiff = (now.getTime() - created.getTime()) / (1000 * 60 * 60);
+		return hoursDiff >= 24;
+	}
+
+	$: overdue = item.stay_until_done && !item.handled && isOverdue(item.created_at);
+
 	function formatTime(time: string | null): string {
 		if (!time) return '';
 		const [hours, minutes] = time.split(':');
@@ -52,6 +63,7 @@
 	class="item-card"
 	class:handled={item.handled}
 	class:compact
+	class:overdue
 	style="--accent-color: {color}"
 	on:click={handleClick}
 >
@@ -103,6 +115,22 @@
 	.item-card.handled {
 		opacity: 0.5;
 		background: #12121f;
+	}
+
+	.item-card.overdue {
+		animation: blink-alert 1s ease-in-out infinite;
+		border-left-color: #ff4444;
+	}
+
+	@keyframes blink-alert {
+		0%, 100% {
+			background: #1a1a2e;
+			box-shadow: none;
+		}
+		50% {
+			background: #3d1a1a;
+			box-shadow: 0 0 20px rgba(255, 68, 68, 0.4);
+		}
 	}
 
 	.item-card.handled .title .text {

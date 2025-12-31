@@ -2,6 +2,7 @@
 	import { onMount, onDestroy } from 'svelte';
 	import Header from '$lib/components/Header.svelte';
 	import ItemCard from '$lib/components/ItemCard.svelte';
+	import Confetti from '$lib/components/Confetti.svelte';
 	import {
 		connectWebSocket,
 		disconnectWebSocket,
@@ -11,6 +12,9 @@
 	} from '$lib/stores/items';
 
 	let showHandled = false;
+
+	// All tasks completed when there are handled items but no active items
+	$: allDone = $activeItems.length === 0 && $handledItems.length > 0;
 
 	onMount(() => {
 		connectWebSocket();
@@ -37,7 +41,14 @@
 	<Header />
 
 	<main>
-		{#if $activeItems.length === 0 && $handledItems.length === 0}
+		{#if allDone}
+			<Confetti />
+			<div class="celebration">
+				<div class="celebration-icon">🎉</div>
+				<div class="celebration-text">All done!</div>
+				<div class="celebration-hint">Great job, everyone!</div>
+			</div>
+		{:else if $activeItems.length === 0 && $handledItems.length === 0}
 			<div class="empty-state">
 				<div class="empty-icon">📋</div>
 				<div class="empty-text">Nothing on the board</div>
@@ -49,22 +60,22 @@
 					<ItemCard {item} color={getColor(item.family_member)} {compact} />
 				{/each}
 			</div>
+		{/if}
 
-			{#if $handledItems.length > 0}
-				<button
-					class="handled-toggle"
-					on:click={() => (showHandled = !showHandled)}
-				>
-					{showHandled ? '▼' : '▶'} Handled ({$handledItems.length})
-				</button>
+		{#if $handledItems.length > 0}
+			<button
+				class="handled-toggle"
+				on:click={() => (showHandled = !showHandled)}
+			>
+				{showHandled ? '▼' : '▶'} Handled ({$handledItems.length})
+			</button>
 
-				{#if showHandled}
-					<div class="handled-items">
-						{#each $handledItems as item (item.id)}
-							<ItemCard {item} color={getColor(item.family_member)} compact={true} />
-						{/each}
-					</div>
-				{/if}
+			{#if showHandled}
+				<div class="handled-items">
+					{#each $handledItems as item (item.id)}
+						<ItemCard {item} color={getColor(item.family_member)} compact={true} />
+					{/each}
+				</div>
 			{/if}
 		{/if}
 	</main>
@@ -134,6 +145,69 @@
 	.empty-hint {
 		font-size: 1rem;
 		color: #444;
+	}
+
+	.celebration {
+		flex: 1;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+		gap: 1rem;
+		animation: fadeIn 0.5s ease-out;
+	}
+
+	@keyframes fadeIn {
+		from {
+			opacity: 0;
+			transform: scale(0.9);
+		}
+		to {
+			opacity: 1;
+			transform: scale(1);
+		}
+	}
+
+	.celebration-icon {
+		font-size: 6rem;
+		animation: bounce 1s ease-in-out infinite;
+	}
+
+	@keyframes bounce {
+		0%, 100% {
+			transform: translateY(0);
+		}
+		50% {
+			transform: translateY(-20px);
+		}
+	}
+
+	.celebration-text {
+		font-size: 3rem;
+		font-weight: 700;
+		background: linear-gradient(90deg, #ff6b6b, #4ecdc4, #45b7d1, #f9ca24);
+		background-size: 300% 300%;
+		-webkit-background-clip: text;
+		-webkit-text-fill-color: transparent;
+		background-clip: text;
+		animation: gradientShift 3s ease infinite;
+	}
+
+	@keyframes gradientShift {
+		0% {
+			background-position: 0% 50%;
+		}
+		50% {
+			background-position: 100% 50%;
+		}
+		100% {
+			background-position: 0% 50%;
+		}
+	}
+
+	.celebration-hint {
+		font-size: 1.5rem;
+		color: #888;
 	}
 
 	.handled-toggle {

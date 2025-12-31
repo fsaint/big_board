@@ -10,6 +10,8 @@ export interface Item {
 	recurrence: string | null;
 	recurrence_day: number | null;
 	handled: boolean;
+	stay_until_done: boolean;
+	created_at: string | null;
 }
 
 interface DashboardState {
@@ -48,6 +50,31 @@ export const connected = derived(dashboardState, $state => $state.connected);
 
 let ws: WebSocket | null = null;
 let reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+let displayDateTimeout: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleDisplayDateRefresh() {
+	if (displayDateTimeout) {
+		clearTimeout(displayDateTimeout);
+	}
+
+	const now = new Date();
+	const target = new Date(now);
+	target.setHours(19, 0, 0, 0); // 7 PM today
+
+	// If it's already past 7 PM, schedule for tomorrow
+	if (now >= target) {
+		target.setDate(target.getDate() + 1);
+	}
+
+	const msUntilRefresh = target.getTime() - now.getTime();
+	console.log(`Scheduling display date refresh in ${Math.round(msUntilRefresh / 1000 / 60)} minutes`);
+
+	displayDateTimeout = setTimeout(() => {
+		requestRefresh();
+		// Schedule next refresh for tomorrow
+		scheduleDisplayDateRefresh();
+	}, msUntilRefresh);
+}
 
 export function connectWebSocket() {
 	if (ws?.readyState === WebSocket.OPEN) return;
@@ -65,6 +92,7 @@ export function connectWebSocket() {
 			clearTimeout(reconnectTimeout);
 			reconnectTimeout = null;
 		}
+		scheduleDisplayDateRefresh();
 	};
 
 	ws.onmessage = (event) => {
@@ -117,6 +145,10 @@ export function disconnectWebSocket() {
 	if (reconnectTimeout) {
 		clearTimeout(reconnectTimeout);
 		reconnectTimeout = null;
+	}
+	if (displayDateTimeout) {
+		clearTimeout(displayDateTimeout);
+		displayDateTimeout = null;
 	}
 	if (ws) {
 		ws.close();

@@ -143,6 +143,7 @@ class ItemCreate(BaseModel):
     category: str
     recurrence: str | None = None
     recurrence_day: int | None = None
+    stay_until_done: bool = False
 
 
 class ItemUpdate(BaseModel):
@@ -153,6 +154,7 @@ class ItemUpdate(BaseModel):
     category: str | None = None
     recurrence: str | None = None
     recurrence_day: int | None = None
+    stay_until_done: bool | None = None
 
 
 @app.post("/api/items")
@@ -261,7 +263,11 @@ Recurrence options:
 - "daily": every day
 - "weekdays": Monday through Friday
 - "weekly": same day each week
-- "monthly": same date each month""",
+- "monthly": same date each month
+
+Stay Until Done:
+Set stay_until_done=true for items that should remain on the dashboard until
+marked as done, regardless of date. After 24 hours these items will blink as alerts.""",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -270,7 +276,8 @@ Recurrence options:
                 "date": {"type": "string", "description": "Date in YYYY-MM-DD format"},
                 "time": {"type": "string", "description": "Optional time in HH:MM format (24-hour)"},
                 "category": {"type": "string", "description": "Category: Meeting, School, Reminder, Task, or Activity"},
-                "recurrence": {"type": "string", "enum": ["daily", "weekdays", "weekly", "monthly"], "description": "Optional recurrence pattern"}
+                "recurrence": {"type": "string", "enum": ["daily", "weekdays", "weekly", "monthly"], "description": "Optional recurrence pattern"},
+                "stay_until_done": {"type": "boolean", "description": "If true, item stays on dashboard until marked done. Blinks after 24 hours."}
             },
             "required": ["title", "family_member", "date", "category"]
         }
@@ -308,7 +315,8 @@ Recurrence options:
                 "date": {"type": "string"},
                 "time": {"type": "string"},
                 "category": {"type": "string"},
-                "recurrence": {"type": "string"}
+                "recurrence": {"type": "string"},
+                "stay_until_done": {"type": "boolean", "description": "If true, item stays until marked done."}
             },
             "required": ["item_id"]
         }
@@ -347,10 +355,12 @@ async def handle_mcp_tool_call(name: str, arguments: dict) -> str:
             time=arguments.get("time"),
             category=arguments["category"],
             recurrence=arguments.get("recurrence"),
+            stay_until_done=arguments.get("stay_until_done", False),
         )
         created = await db.add_item(item)
         await broadcast_items()
-        return f"Added item #{created.id}: '{created.title}' for {created.family_member} on {created.date}"
+        stay_str = " [STAY UNTIL DONE]" if created.stay_until_done else ""
+        return f"Added item #{created.id}: '{created.title}' for {created.family_member} on {created.date}{stay_str}"
 
     elif name == "list_items":
         date_str = arguments.get("date")
@@ -370,9 +380,10 @@ async def handle_mcp_tool_call(name: str, arguments: dict) -> str:
             time_str = f" at {item.time}" if item.time else ""
             recur_str = f" ({item.recurrence})" if item.recurrence else ""
             handled_str = " [HANDLED]" if item.handled else ""
+            stay_str = " [STAY]" if item.stay_until_done else ""
             lines.append(
                 f"  #{item.id}: [{item.category}] {item.family_member} - {item.title}"
-                f"{time_str}{recur_str}{handled_str}"
+                f"{time_str}{recur_str}{stay_str}{handled_str}"
             )
         return "\n".join(lines)
 

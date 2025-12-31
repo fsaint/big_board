@@ -46,7 +46,11 @@ Recurrence options:
 For weekly recurrence on a specific day, set recurrence="weekly" and recurrence_day to:
 0=Monday, 1=Tuesday, 2=Wednesday, 3=Thursday, 4=Friday, 5=Saturday, 6=Sunday
 
-Example: "Every Monday" = recurrence="weekly", recurrence_day=0""",
+Example: "Every Monday" = recurrence="weekly", recurrence_day=0
+
+Stay Until Done:
+Set stay_until_done=true for items that should remain on the dashboard until
+marked as done, regardless of date. After 24 hours these items will blink as alerts.""",
             inputSchema={
                 "type": "object",
                 "properties": {
@@ -78,6 +82,10 @@ Example: "Every Monday" = recurrence="weekly", recurrence_day=0""",
                     "recurrence_day": {
                         "type": "integer",
                         "description": "For weekly: day of week (0=Mon, 1=Tue, 2=Wed, 3=Thu, 4=Fri, 5=Sat, 6=Sun). For monthly: day of month (1-31)."
+                    },
+                    "stay_until_done": {
+                        "type": "boolean",
+                        "description": "If true, item stays on dashboard until marked done (ignores date). Blinks after 24 hours."
                     }
                 },
                 "required": ["title", "family_member", "date", "category"]
@@ -126,7 +134,8 @@ Example: "Every Monday" = recurrence="weekly", recurrence_day=0""",
                     "time": {"type": "string"},
                     "category": {"type": "string"},
                     "recurrence": {"type": "string"},
-                    "recurrence_day": {"type": "integer", "description": "For weekly: 0-6 (Mon-Sun). For monthly: 1-31."}
+                    "recurrence_day": {"type": "integer", "description": "For weekly: 0-6 (Mon-Sun). For monthly: 1-31."},
+                    "stay_until_done": {"type": "boolean", "description": "If true, item stays until marked done."}
                 },
                 "required": ["item_id"]
             }
@@ -180,6 +189,7 @@ async def call_tool(name: str, arguments: dict) -> list[TextContent]:
                 "category": arguments["category"],
                 "recurrence": arguments.get("recurrence"),
                 "recurrence_day": arguments.get("recurrence_day"),
+                "stay_until_done": arguments.get("stay_until_done", False),
             }
             resp = await client.post("/api/items", json=payload)
             if resp.status_code == 200:

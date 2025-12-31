@@ -33,6 +33,7 @@ class Item(BaseModel):
     recurrence_day: Optional[int] = None  # for weekly (0-6) or monthly (1-31)
     handled: bool = False
     handled_date: Optional[str] = None  # track when it was handled for midnight reset
+    stay_until_done: bool = False  # if True, stays on dashboard until marked done
     created_at: Optional[str] = None
 
 
@@ -62,9 +63,16 @@ async def init_db():
                 recurrence_day INTEGER,
                 handled INTEGER DEFAULT 0,
                 handled_date TEXT,
+                stay_until_done INTEGER DEFAULT 0,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
         """)
+
+        # Migration: add stay_until_done column if it doesn't exist
+        try:
+            await db.execute("ALTER TABLE items ADD COLUMN stay_until_done INTEGER DEFAULT 0")
+        except Exception:
+            pass  # Column already exists
 
         await db.execute("""
             CREATE TABLE IF NOT EXISTS family_members (
@@ -179,6 +187,7 @@ def _row_to_item(row) -> Item:
         recurrence_day=row["recurrence_day"],
         handled=bool(row["handled"]),
         handled_date=row["handled_date"],
+        stay_until_done=bool(row["stay_until_done"]) if row["stay_until_done"] is not None else False,
         created_at=row["created_at"],
     )
 
@@ -217,10 +226,10 @@ async def add_item(item: Item) -> Item:
 
     async with aiosqlite.connect(DATABASE_PATH) as db:
         cursor = await db.execute(
-            """INSERT INTO items (title, family_member, date, time, category, recurrence, recurrence_day)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            """INSERT INTO items (title, family_member, date, time, category, recurrence, recurrence_day, stay_until_done)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (item.title, item.family_member, item.date, item.time, item.category,
-             item.recurrence, item.recurrence_day)
+             item.recurrence, item.recurrence_day, 1 if item.stay_until_done else 0)
         )
         await db.commit()
         item.id = cursor.lastrowid
@@ -228,32 +237,37 @@ async def add_item(item: Item) -> Item:
 
 
 async def get_items_for_date(target_date: date) -> list[Item]:
-    """Get all items for a specific date, including recurring items."""
+    """Get all items for a specific date, including recurring items and stay_until_done items."""
     target_str = target_date.strftime("%Y-%m-%d")
-    today_str = date.today().strftime("%Y-%m-%d")
 
     async with aiosqlite.connect(DATABASE_PATH) as db:
         db.row_factory = aiosqlite.Row
 
-        # Get exact date matches
+        # Get exact date matches (excluding stay_until_done which we handle separately)
         cursor = await db.execute(
-            "SELECT * FROM items WHERE date = ? ORDER BY time, title",
+            "SELECT * FROM items WHERE date = ? AND (stay_until_done = 0 OR stay_until_done IS NULL) ORDER BY time, title",
             (target_str,)
         )
         exact_rows = await cursor.fetchall()
 
-        # Get recurring items
+        # Get recurring items (excluding stay_until_done)
         cursor = await db.execute(
-            "SELECT * FROM items WHERE recurrence IS NOT NULL"
+            "SELECT * FROM items WHERE recurrence IS NOT NULL AND (stay_until_done = 0 OR stay_until_done IS NULL)"
         )
         recurring_rows = await cursor.fetchall()
+
+        # Get all unhandled stay_until_done items (regardless of date)
+        cursor = await db.execute(
+            "SELECT * FROM items WHERE stay_until_done = 1 AND handled = 0"
+        )
+        stay_until_done_rows = await cursor.fetchall()
 
         items = []
 
         for row in exact_rows:
             item = _row_to_item(row)
-            # Reset handled if it was handled on a previous day
-            if item.handled and item.handled_date != today_str:
+            # Reset handled if it was handled on a different day than the target date
+            if item.handled and item.handled_date != target_str:
                 item.handled = False
             items.append(item)
 
@@ -263,10 +277,15 @@ async def get_items_for_date(target_date: date) -> list[Item]:
 
             if _matches_recurrence(row["date"], row["recurrence"], row["recurrence_day"], target_date):
                 item = _row_to_item(row)
-                # For recurring items, check if handled today
-                if item.handled and item.handled_date != today_str:
+                # For recurring items, check if handled on the target date
+                if item.handled and item.handled_date != target_str:
                     item.handled = False
                 items.append(item)
+
+        # Add stay_until_done items (they persist until handled)
+        for row in stay_until_done_rows:
+            item = _row_to_item(row)
+            items.append(item)
 
         # Sort by time, then title
         items.sort(key=lambda x: (x.time or "99:99", x.title))
@@ -292,7 +311,7 @@ async def update_item(item_id: int, updates: dict) -> Optional[Item]:
         values = []
         for key, value in updates.items():
             if key in ["title", "family_member", "date", "time", "category",
-                       "recurrence", "recurrence_day", "handled", "handled_date"]:
+                       "recurrence", "recurrence_day", "handled", "handled_date", "stay_until_done"]:
                 set_clauses.append(f"{key} = ?")
                 values.append(value)
 
